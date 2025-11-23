@@ -1,8 +1,15 @@
 import os
+import logging
 from dataclasses import dataclass
 from dotenv import load_dotenv
 
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -15,18 +22,26 @@ class TelegramConfig:
     def __post_init__(self):
         if not self.bot_token:
             raise ValueError("TELEGRAM_BOT_TOKEN не установлен в .env")
+        if self.channel_id == 0:
+            raise ValueError("TELEGRAM_CHANNEL_ID не установлен в .env")
+        if self.admin_id == 0:
+            raise ValueError("ADMIN_ID не установлен в .env")
 
 
 @dataclass
-class SupabaseConfig:
-    """Конфиг Supabase Storage и Database"""
-    url: str = os.getenv("SUPABASE_URL")
-    key: str = os.getenv("SUPABASE_KEY")
-    bucket_name: str = os.getenv("SUPABASE_BUCKET", "documents")
+class GitHubConfig:
+    """Конфиг GitHub Storage"""
+    token: str = os.getenv("GITHUB_TOKEN")
+    repo: str = os.getenv("GITHUB_REPO")  # format: "username/repo"
+    media_folder: str = os.getenv("GITHUB_MEDIA_FOLDER", "media")
 
     def __post_init__(self):
-        if not self.url or not self.key:
-            raise ValueError("SUPABASE_URL и SUPABASE_KEY не установлены в .env")
+        if not self.token:
+            raise ValueError("GITHUB_TOKEN не установлен в .env")
+        if not self.repo:
+            raise ValueError("GITHUB_REPO не установлен в .env")
+        if "/" not in self.repo:
+            raise ValueError("GITHUB_REPO должен быть в формате 'username/repo'")
 
 
 @dataclass
@@ -48,6 +63,8 @@ class AppConfig:
         "image/jpeg",
         "image/png",
         "image/webp",
+        "image/jpg",
+        "image/gif",
     )
 
     # Логирование
@@ -59,7 +76,32 @@ class AppConfig:
         return self.ALLOWED_DOCUMENTS + self.ALLOWED_IMAGES
 
 
+# ============================================================
 # Инициализация конфигов
+# ============================================================
+
 telegram_config = TelegramConfig()
-supabase_config = SupabaseConfig()
+github_config = GitHubConfig()
 app_config = AppConfig()
+
+# ============================================================
+# Инициализация Telegram Bot и Dispatcher
+# ============================================================
+
+default_properties = DefaultBotProperties(
+    parse_mode=ParseMode.HTML
+)
+
+bot = Bot(
+    token=telegram_config.bot_token,
+    default=default_properties
+)
+
+dp = Dispatcher()
+
+logger.info("✅ Config инициализирован")
+logger.info(f"🤖 Telegram Token: {telegram_config.bot_token[:20]}...")
+logger.info(f"👤 Admin ID: {telegram_config.admin_id}")
+logger.info(f"📢 Channel ID: {telegram_config.channel_id}")
+logger.info(f"🐙 GitHub Repo: {github_config.repo}")
+logger.info(f"📁 GitHub Media Folder: {github_config.media_folder}")

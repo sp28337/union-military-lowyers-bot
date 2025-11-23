@@ -4,15 +4,15 @@ from aiogram.types import Message
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import uuid
 
-from storage import pending_callbacks
+from storage import pending_callbacks  # ✅ Оставляем в памяти (не в БД)
 from models.schemas import MediaItem, MediaType, MediaStatus
-from services.supabase_service import SupabaseService
-from config import bot, telegram_config, app_config
+from services.github_service import GitHubService  # ✅ Меняем на GitHub
+from config import telegram_config, app_config
 
 logger = logging.getLogger(__name__)
 router = Router()
 
-supabase_service = SupabaseService()
+github_service = GitHubService()  # ✅ GitHub вместо Supabase
 
 
 @router.channel_post()
@@ -55,9 +55,10 @@ async def handle_document(message: Message, bot: Bot) -> None:
             status=MediaStatus.PENDING
         )
 
-        await supabase_service.add_pending_upload(media_item, message.message_id)
-        await ask_admin_for_approval(bot, media_item)
+        # ✅ Не сохраняем в БД (если вы её используете, сохраняйте только для статистики)
+        # await supabase_service.add_pending_upload(media_item, message.message_id)
 
+        await ask_admin_for_approval(bot, media_item)
         logger.info(f"✅ Документ добавлен в очередь: {document.file_name}")
 
     except Exception as e:
@@ -86,9 +87,7 @@ async def handle_photo(message: Message, bot: Bot) -> None:
             status=MediaStatus.PENDING
         )
 
-        await supabase_service.add_pending_upload(media_item, message.message_id)
         await ask_admin_for_approval(bot, media_item)
-
         logger.info(f"✅ Фото добавлено в очередь")
 
     except Exception as e:
@@ -98,11 +97,10 @@ async def handle_photo(message: Message, bot: Bot) -> None:
 async def ask_admin_for_approval(bot: Bot, media_item: MediaItem) -> None:
     """Отправляет админу запрос подтверждения"""
 
-    # ✅ Генерируем short_id и СОХРАНЯЕМ В БД
+    # ✅ Генерируем short_id и СОХРАНЯЕМ В ПАМЯТИ
     short_id = str(uuid.uuid4())[:8]
-
-    # ✅ СОХРАНЯЕМ В ГЛОБАЛЬНЫЙ СЛОВАРЬ
     pending_callbacks[short_id] = media_item.telegram_file_id
+
     logger.info(f"💾 Сохранил mapping: {short_id} -> {media_item.telegram_file_id}")
     logger.info(f"📌 Всё в кэше: {pending_callbacks}")
 
@@ -120,10 +118,6 @@ async def ask_admin_for_approval(bot: Bot, media_item: MediaItem) -> None:
         caption += f"💬 Описание: <code>{media_item.caption}</code>\n"
 
     caption += f"\n❓ Загрузить на сайт?"
-
-    logger.info(f"🔑 short_id = {short_id}")
-    logger.info(f"📝 approve callback_data = approve_{short_id}")
-    logger.info(f"📝 reject callback_data = reject_{short_id}")
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
