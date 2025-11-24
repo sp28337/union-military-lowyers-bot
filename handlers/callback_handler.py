@@ -1,12 +1,11 @@
 from aiogram import types, Router, F
-from aiogram.types import CallbackQuery
 from io import BytesIO
 import logging
 
-from config import bot, telegram_config, app_config
-from services.github_service import GitHubService  # ✅ GitHub
-from models.schemas import MediaType
-from storage import pending_callbacks  # ✅ Кэш в памяти
+from config import bot
+from services.github_service import GitHubService
+from schemas.media_schemas import MediaType
+from storage import pending_callbacks
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -38,19 +37,18 @@ async def handle_approve(query: types.CallbackQuery):
         file_data = BytesIO(file_bytes.read())
         logger.info(f"✅ Файл скачан: {file_info.file_size} bytes")
 
-        # ✅ НОВОЕ: Определяем тип и имя файла из file_info
         # Telegram не сохраняет оригинальное имя в file_info
         # Поэтому используем расширение из file_path
-        filename = file_info.file_path.split('/')[-1]
-        if '.' not in filename:
+        filename = file_info.file_path.split("/")[-1]
+        if "." not in filename:
             # Если расширения нет, определяем по содержимому или используем генерируемое имя
             filename = f"file_{file_id[:8]}"
 
         # Определяем тип медиа (фото или документ)
-        file_ext = filename.split('.')[-1].lower()
+        file_ext = filename.split(".")[-1].lower()
         media_type = (
             MediaType.PHOTO
-            if file_ext in ['jpg', 'jpeg', 'png', 'gif', 'webp']
+            if file_ext in ["jpg", "jpeg", "png", "gif", "webp"]
             else MediaType.DOCUMENT
         )
 
@@ -60,9 +58,7 @@ async def handle_approve(query: types.CallbackQuery):
 
         # ✅ Загружаем в GitHub
         storage_url = await github_service.upload_file_to_github(
-            file_data,
-            filename,
-            media_type
+            file_data, filename, media_type
         )
 
         # Определяем тип медиа для ответа
@@ -80,7 +76,7 @@ async def handle_approve(query: types.CallbackQuery):
                     chat_id=query.message.chat.id,
                     message_id=query.message.message_id,
                     text=success_msg,
-                    parse_mode="HTML"
+                    parse_mode="HTML",
                 )
             else:
                 # Фото - используем caption
@@ -88,7 +84,7 @@ async def handle_approve(query: types.CallbackQuery):
                     chat_id=query.message.chat.id,
                     message_id=query.message.message_id,
                     caption=success_msg,
-                    parse_mode="HTML"
+                    parse_mode="HTML",
                 )
             logger.info(f"✅ {media_type_str} успешно одобрен")
         except Exception as e:
@@ -131,14 +127,14 @@ async def handle_reject(query: types.CallbackQuery):
                 await bot.edit_message_caption(
                     chat_id=query.message.chat.id,
                     message_id=query.message.message_id,
-                    caption=f"❌ {media_type_str} отклонен"
+                    caption=f"❌ {media_type_str} отклонен",
                 )
             else:
                 # Это был документ/текст
                 await bot.edit_message_text(
                     chat_id=query.message.chat.id,
                     message_id=query.message.message_id,
-                    text=f"❌ {media_type_str} отклонен"
+                    text=f"❌ {media_type_str} отклонен",
                 )
         except Exception as e:
             logger.warning(f"⚠️ Не получилось отредактировать сообщение: {e}")

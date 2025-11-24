@@ -1,28 +1,24 @@
 import logging
 import base64
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, UTC
 from io import BytesIO
 import uuid
 
 from github import Github, GithubException
-from config import github_config, app_config
-from models.schemas import MediaItem, MediaStatus, MediaType
+from config import github_config
+from schemas.media_schemas import MediaItem, MediaType
 
 logger = logging.getLogger(__name__)
 
 
 class GitHubService:
-    """Сервис для работы с GitHub Storage"""
-
     def __init__(self):
-        """Инициализация GitHub клиента"""
         self.github = Github(github_config.token)
         self.repo_name = github_config.repo
         self.media_folder = github_config.media_folder
 
         try:
-            # ✅ Проверяем доступ к репозиторию
             owner, repo = self.repo_name.split("/")
             self.repo = self.github.get_user(owner).get_repo(repo)
             logger.info(f"✅ Подключение к GitHub репо: {self.repo_name}")
@@ -32,10 +28,7 @@ class GitHubService:
             raise ValueError(f"Не удалось подключиться к репо {self.repo_name}")
 
     async def upload_file_to_github(
-            self,
-            file_data: BytesIO,
-            filename: str,
-            media_type: MediaType
+        self, file_data: BytesIO, filename: str, media_type: MediaType
     ) -> str:
         """
         Загружает файл в GitHub репозиторий
@@ -46,22 +39,12 @@ class GitHubService:
         3. Кодируем файл в base64 (требование GitHub API)
         4. Загружаем через GitHub API
         5. Возвращаем публичный URL (raw.githubusercontent.com)
-
-        ❌ НЕ ДЕЛАЕМ:
-        - Не используем file_cache (кэш в памяти)
-        - Не создаём локальные файлы
-        - Не используем webhook'и
-
-        ✅ ДЕЛАЕМ:
-        - Async/await для неблокирующей работы
-        - Правильные пути с датой
-        - Полные публичные URLs
         """
         try:
-            date_path = datetime.utcnow().strftime("%Y-%m-%d")
+            date_path = datetime.now(UTC).strftime("%Y-%m-%d")
 
             # ✅ Генерируем безопасное имя файла
-            file_ext = filename.split('.')[-1] if '.' in filename else 'bin'
+            file_ext = filename.split(".")[-1] if "." in filename else "bin"
             safe_filename = f"{uuid.uuid4().hex}.{file_ext}"
 
             # ✅ Путь внутри репозитория
@@ -77,7 +60,7 @@ class GitHubService:
             logger.info(f"📊 File size: {len(file_content)} bytes")
 
             # ✅ GitHub API требует base64 кодирование для бинарных файлов
-            encoded_content = base64.b64encode(file_content).decode('utf-8')
+            encoded_content = base64.b64encode(file_content).decode("utf-8")
 
             # ✅ Создаём commit с файлом
             try:
@@ -85,7 +68,7 @@ class GitHubService:
                     path=github_path,
                     message=f"📤 Upload: {filename} ({media_type.value})",
                     content=file_content,
-                    branch="main"
+                    branch="main",
                 )
                 logger.info(f"✅ Файл успешно загружен в GitHub")
             except GithubException as e:
@@ -99,7 +82,7 @@ class GitHubService:
                             message=f"🔄 Update: {filename}",
                             content=file_content,
                             sha=file_content_obj.sha,
-                            branch="main"
+                            branch="main",
                         )
                         logger.info(f"✅ Файл успешно обновлен в GitHub")
                     except GithubException as update_error:
@@ -123,9 +106,7 @@ class GitHubService:
             raise
 
     async def create_pending_issue(
-            self,
-            media_item: MediaItem,
-            short_id: str
+        self, media_item: MediaItem, short_id: str
     ) -> Optional[int]:
         """
         ✅ ОПЦИОНАЛЬНО: Создаём GitHub Issue для отслеживания
@@ -134,12 +115,6 @@ class GitHubService:
         - Отслеживания истории загрузок
         - Комментариев и обсуждений
         - Интеграции с CI/CD
-
-        ❌ НЕ ИСПОЛЬЗУЕМ:
-        - Database (pending_uploads в Supabase)
-
-        ✅ ИСПОЛЬЗУЕМ:
-        - GitHub Issues как "очередь" задач
         """
         try:
             media_emoji = "📷" if media_item.media_type == MediaType.PHOTO else "📄"
@@ -161,7 +136,7 @@ class GitHubService:
             issue = self.repo.create_issue(
                 title=f"{media_emoji} {media_item.filename}",
                 body=issue_body,
-                labels=["media-upload", "pending"]
+                labels=["media-upload", "pending"],
             )
 
             logger.info(f"✅ GitHub Issue создана: #{issue.number}")
@@ -171,7 +146,9 @@ class GitHubService:
             logger.warning(f"⚠️ Не удалось создать Issue: {e}")
             return None
 
-    async def list_uploaded_files(self, media_type: Optional[MediaType] = None) -> List[dict]:
+    async def list_uploaded_files(
+        self, media_type: Optional[MediaType] = None
+    ) -> List[dict]:
         """
         Получить список всех загруженных файлов
 
@@ -198,14 +175,21 @@ class GitHubService:
                                 f"{repo_name}/main/{item.path}"
                             )
 
-                            files.append({
-                                "path": item.path,
-                                "name": item.name,
-                                "url": url,
-                                "size": item.size,
-                                "type": "photo" if item.name.lower().endswith(
-                                    ('.jpg', '.jpeg', '.png', '.gif', '.webp')) else "document"
-                            })
+                            files.append(
+                                {
+                                    "path": item.path,
+                                    "name": item.name,
+                                    "url": url,
+                                    "size": item.size,
+                                    "type": (
+                                        "photo"
+                                        if item.name.lower().endswith(
+                                            (".jpg", ".jpeg", ".png", ".gif", ".webp")
+                                        )
+                                        else "document"
+                                    ),
+                                }
+                            )
 
                 traverse_folder(contents)
 
@@ -217,7 +201,9 @@ class GitHubService:
 
             # Фильтруем по типу медиа
             if media_type:
-                media_type_str = "photo" if media_type == MediaType.PHOTO else "document"
+                media_type_str = (
+                    "photo" if media_type == MediaType.PHOTO else "document"
+                )
                 files = [f for f in files if f["type"] == media_type_str]
 
             logger.info(f"📊 Найдено файлов: {len(files)}")
@@ -235,7 +221,7 @@ class GitHubService:
                 path=file_path,
                 message=f"🗑️ Delete: {file_content.name}",
                 sha=file_content.sha,
-                branch="main"
+                branch="main",
             )
             logger.info(f"✅ Файл удалён: {file_path}")
             return True
@@ -254,7 +240,7 @@ class GitHubService:
                 "total_size_mb": total_size / (1024 * 1024),
                 "repo_name": self.repo_name,
                 "branch": "main",
-                "media_folder": self.media_folder
+                "media_folder": self.media_folder,
             }
 
             logger.info(f"📊 Storage stats: {stats}")

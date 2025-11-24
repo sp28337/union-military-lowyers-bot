@@ -1,90 +1,78 @@
 import asyncio
 import logging
 import sys
-from aiogram import Bot, Dispatcher, Router
+from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from services.supabase_service import SupabaseService
-from config import bot, dp, telegram_config, app_config
-from handlers import channel_handler, callback_handler
+from services.github_service import GitHubService
+from config import telegram_config, app_config, github_config
+from handlers import channel_handler, callback_handler, admin_handler
 
 
-# Конфиг логирования
 logging.basicConfig(
     level=app_config.LOG_LEVEL,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('bot.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.FileHandler("bot.log"), logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger(__name__)
 
-# Инициализация сервисов
-supabase_service = SupabaseService()
+github_service = GitHubService()
 
 
 async def main():
-    """Главная функция приложения"""
-
     logger.info("=" * 60)
     logger.info("🚀 ЗАПУСК TELEGRAM БОТА")
     logger.info("=" * 60)
     logger.info(f"✅ Версия aiogram: 3.22.0")
     logger.info(f"✅ Администратор ID: {telegram_config.admin_id}")
     logger.info(f"✅ Канал ID: {telegram_config.channel_id}")
+    logger.info(f"✅ GitHub Repo: {github_config.repo}")
+    logger.info(f"✅ Media Folder: {github_config.media_folder}")
     logger.info("=" * 60)
 
-    # Инициализация Bot и Dispatcher
-    bot = Bot(
+    bot_instance = Bot(
         token=telegram_config.bot_token,
-        default=DefaultBotProperties(
-            parse_mode=ParseMode.HTML
-        )
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
 
     dispatcher = Dispatcher(storage=MemoryStorage())
 
-    # ✅ Правильное добавление роутеров в aiogram 3.22.0
     dispatcher.include_router(channel_handler.router)
     dispatcher.include_router(admin_handler.router)
     dispatcher.include_router(callback_handler.router)
 
     try:
-        # Инициализируем Supabase (создаём таблицы если нужно)
-        logger.info("🔄 Инициализация Supabase...")
-        await supabase_service.initialize_tables()
-        logger.info("✅ Supabase инициализирован")
+        logger.info("🔄 Инициализация GitHub Storage...")
+        stats = await github_service.get_storage_stats()
+        logger.info(f"✅ GitHub инициализирован")
+        logger.info(f"📊 Текущее использование: {stats.get('total_size_mb', 0):.2f} МБ")
 
-        # Получаем информацию о боте
-        bot_info = await bot.get_me()
+        bot_info = await bot_instance.get_me()
         logger.info(f"✅ Бот активирован: @{bot_info.username}")
         logger.info(f"✅ ID бота: {bot_info.id}")
 
-        # Отправляем уведомление админу
-        await bot.send_message(
+        await bot_instance.send_message(
             chat_id=telegram_config.admin_id,
             text=f"✅ <b>Бот запущен!</b>\n\n"
-                 f"🤖 @{bot_info.username}\n"
-                 f"📌 ID: <code>{bot_info.id}</code>\n\n"
-                 f"Я готов мониторить канал и обрабатывать файлы.",
-            parse_mode="HTML"
+            f"🤖 @{bot_info.username}\n"
+            f"📌 ID: <code>{bot_info.id}</code>\n\n"
+            f"🐙 GitHub Repo: <code>{github_config.repo}</code>\n"
+            f"📁 Media Folder: <code>{github_config.media_folder}</code>\n\n",
+            parse_mode="HTML",
         )
 
-        # Запускаем бота
         logger.info("⏳ Слушаю Telegram канал...")
         logger.info("💡 Нажмите Ctrl+C для остановки")
 
-        # ✅ ИСПРАВЛЕНИЕ: Принимаем ВСЕ обновления
-        await dispatcher.start_polling(bot, allowed_updates=None)
+        await dispatcher.start_polling(bot_instance, allowed_updates=None)
 
-    except Exception as e:
-        logger.error(f"❌ Ошибка запуска: {e}", exc_info=True)
+    except Exception as error:
+        logger.error(f"❌ Ошибка запуска: {error}", exc_info=True)
         raise
     finally:
-        await bot.session.close()
+        await bot_instance.session.close()
 
 
 if __name__ == "__main__":

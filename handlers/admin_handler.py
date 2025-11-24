@@ -4,8 +4,7 @@ from aiogram.types import Message
 from aiogram.filters import Command
 
 from config import telegram_config
-from services.github_service import GitHubService  # ✅ GitHub
-from models.schemas import MediaType
+from services.github_service import GitHubService
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -19,7 +18,7 @@ def admin_only(func):
     async def wrapper(message_or_query, *args, **kwargs):
         user_id = (
             message_or_query.from_user.id
-            if hasattr(message_or_query, 'from_user')
+            if hasattr(message_or_query, "from_user")
             else message_or_query.message.from_user.id
         )
         if user_id != telegram_config.admin_id:
@@ -27,7 +26,7 @@ def admin_only(func):
                 await message_or_query.answer("❌ У вас нет прав!")
             else:
                 await message_or_query.answer("❌ У вас нет прав!", show_alert=True)
-            return
+            return None
         return await func(message_or_query, *args, **kwargs)
 
     return wrapper
@@ -36,7 +35,7 @@ def admin_only(func):
 @router.message(Command("status"))
 async def handle_status(message: Message):
     """Проверить статус загрузок и хранилища"""
-    # ПРОВЕРКА ПРАВ АДМИНА
+
     if message.from_user.id != telegram_config.admin_id:
         await message.answer("❌ У вас нет прав!")
         return
@@ -79,8 +78,8 @@ async def handle_list_files(message: Message):
             return
 
         # Группируем по типам
-        photos = [f for f in files if f['type'] == 'photo']
-        documents = [f for f in files if f['type'] == 'document']
+        photos = [f for f in files if f["type"] == "photo"]
+        documents = [f for f in files if f["type"] == "document"]
 
         text = f"📂 <b>Загруженные файлы</b>\n\n"
         text += f"📷 Фото: <b>{len(photos)}</b>\n"
@@ -88,7 +87,7 @@ async def handle_list_files(message: Message):
 
         text += f"<b>Последние 10 файлов:</b>\n"
         for i, file in enumerate(files[:10], 1):
-            size_kb = file['size'] / 1024
+            size_kb = file["size"] / 1024
             text += f"{i}. {file['name']} ({size_kb:.1f} КБ)\n"
 
         if len(files) > 10:

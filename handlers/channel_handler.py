@@ -4,15 +4,15 @@ from aiogram.types import Message
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import uuid
 
-from storage import pending_callbacks  # ✅ Оставляем в памяти (не в БД)
-from models.schemas import MediaItem, MediaType, MediaStatus
-from services.github_service import GitHubService  # ✅ Меняем на GitHub
+from storage import pending_callbacks
+from schemas.media_schemas import MediaItem, MediaType, MediaStatus
+from services.github_service import GitHubService
 from config import telegram_config, app_config
 
 logger = logging.getLogger(__name__)
 router = Router()
 
-github_service = GitHubService()  # ✅ GitHub вместо Supabase
+github_service = GitHubService()
 
 
 @router.channel_post()
@@ -52,11 +52,8 @@ async def handle_document(message: Message, bot: Bot) -> None:
             size_bytes=document.file_size,
             caption=message.caption,
             telegram_post_id=message.message_id,
-            status=MediaStatus.PENDING
+            status=MediaStatus.PENDING,
         )
-
-        # ✅ Не сохраняем в БД (если вы её используете, сохраняйте только для статистики)
-        # await supabase_service.add_pending_upload(media_item, message.message_id)
 
         await ask_admin_for_approval(bot, media_item)
         logger.info(f"✅ Документ добавлен в очередь: {document.file_name}")
@@ -84,7 +81,7 @@ async def handle_photo(message: Message, bot: Bot) -> None:
             size_bytes=photo.file_size,
             caption=message.caption,
             telegram_post_id=message.message_id,
-            status=MediaStatus.PENDING
+            status=MediaStatus.PENDING,
         )
 
         await ask_admin_for_approval(bot, media_item)
@@ -123,12 +120,10 @@ async def ask_admin_for_approval(bot: Bot, media_item: MediaItem) -> None:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="✅ Загрузить",
-                    callback_data=f"approve_{short_id}"
+                    text="✅ Загрузить", callback_data=f"approve_{short_id}"
                 ),
                 InlineKeyboardButton(
-                    text="❌ Отклонить",
-                    callback_data=f"reject_{short_id}"
+                    text="❌ Отклонить", callback_data=f"reject_{short_id}"
                 ),
             ]
         ]
@@ -145,7 +140,7 @@ async def ask_admin_for_approval(bot: Bot, media_item: MediaItem) -> None:
                 photo=media_item.telegram_file_id,
                 caption=caption,
                 parse_mode="HTML",
-                reply_markup=keyboard
+                reply_markup=keyboard,
             )
             logger.info(f"✅ Запрос подтверждения отправлен (фото)")
         except Exception as e:
@@ -154,13 +149,13 @@ async def ask_admin_for_approval(bot: Bot, media_item: MediaItem) -> None:
                 chat_id=telegram_config.admin_id,
                 text=caption,
                 parse_mode="HTML",
-                reply_markup=keyboard
+                reply_markup=keyboard,
             )
     else:
         await bot.send_message(
             chat_id=telegram_config.admin_id,
             text=caption,
             parse_mode="HTML",
-            reply_markup=keyboard
+            reply_markup=keyboard,
         )
         logger.info(f"✅ Запрос подтверждения отправлен (документ)")
