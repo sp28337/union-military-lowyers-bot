@@ -2,7 +2,7 @@ import logging
 from aiogram import Router
 from aiogram.types import Message
 from aiogram.filters import Command
-
+from html import escape
 from config import telegram_config
 from services.github_service import GitHubService
 
@@ -44,10 +44,14 @@ async def handle_status(message: Message):
         # ✅ Получаем статистику из GitHub
         stats = await github_service.get_storage_stats()
 
+        repo_name = escape(stats.get("repo_name", "N/A"))
+        media_folder = escape(stats.get("media_folder", "N/A"))
+        branch = escape(stats.get("branch", "main"))
+
         status_text = f"📊 <b>Статус GitHub Storage</b>\n\n"
-        status_text += f"🐙 Репозиторий: <code>{stats.get('repo_name', 'N/A')}</code>\n"
-        status_text += f"📁 Папка: <code>{stats.get('media_folder', 'N/A')}</code>\n"
-        status_text += f"🌿 Ветка: <code>{stats.get('branch', 'main')}</code>\n\n"
+        status_text += f"🐙 Репозиторий: <code>{repo_name}</code>\n"
+        status_text += f"📁 Папка: <code>{media_folder}</code>\n"
+        status_text += f"🌿 Ветка: <code>{branch}</code>\n\n"
 
         status_text += f"📦 <b>Использование:</b>\n"
         status_text += f"📄 Файлов: <b>{stats.get('total_files', 0)}</b>\n"
@@ -59,7 +63,8 @@ async def handle_status(message: Message):
 
     except Exception as e:
         logger.error(f"❌ Ошибка: {e}", exc_info=True)
-        await message.answer(f"❌ Ошибка получения статистики: {str(e)[:200]}")
+        escaped_error = escape(str(e)[:200])
+        await message.answer(f"❌ Ошибка получения статистики: {escaped_error}")
 
 
 @router.message(Command("files"))
@@ -87,8 +92,9 @@ async def handle_list_files(message: Message):
 
         text += f"<b>Последние 10 файлов:</b>\n"
         for i, file in enumerate(files[:10], 1):
+            escaped_name = escape(file["name"])
             size_kb = file["size"] / 1024
-            text += f"{i}. {file['name']} ({size_kb:.1f} КБ)\n"
+            text += f"{i}. {escaped_name} ({size_kb:.1f} КБ)\n"
 
         if len(files) > 10:
             text += f"\n... и ещё {len(files) - 10} файлов"
@@ -97,7 +103,8 @@ async def handle_list_files(message: Message):
 
     except Exception as e:
         logger.error(f"❌ Ошибка: {e}", exc_info=True)
-        await message.answer(f"❌ Ошибка: {str(e)[:200]}")
+        escaped_error = escape(str(e)[:200])
+        await message.answer(f"❌ Ошибка: {escaped_error}")
 
 
 @router.message(Command("start"))
@@ -137,7 +144,8 @@ async def handle_help(message: Message):
         f"1️⃣ Вы загружаете файл в канал\n"
         f"2️⃣ Я обнаруживаю файл и отправляю вам уведомление\n"
         f"3️⃣ Вы нажимаете '✅ Загрузить' или '❌ Отклонить'\n"
-        f"4️⃣ Файл попадает в GitHub или отклоняется\n\n"
+        f"4️⃣ Вы вводите желаемое название файла\n"
+        f"5️⃣ Файл попадает в GitHub с правильным названием\n\n"
         f"<b>Где хранятся файлы:</b>\n"
         f"🐙 GitHub репозиторий: <code>{telegram_config.github_repo}</code>\n"
         f"📁 Папка: <code>media/</code>\n"

@@ -6,18 +6,18 @@ from typing import Optional
 class MediaType(str, Enum):
     """Типы медиа"""
 
-    PHOTO = "photo"
-    DOCUMENT = "document"
+    PHOTO = "PHOTO"
+    DOCUMENT = "DOCUMENT"
 
 
 class MediaStatus(str, Enum):
     """Статус загрузки"""
 
-    PENDING = "pending"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    UPLOADED = "uploaded"
-    FAILED = "failed"
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    UPLOADED = "UPLOADED"
+    FAILED = "FAILED"
 
 
 class MediaItem(BaseModel):

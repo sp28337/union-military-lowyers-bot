@@ -4,7 +4,7 @@ from aiogram.types import Message
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import uuid
 
-from storage import pending_callbacks
+from storage import pending_callbacks, PendingFile
 from schemas.media_schemas import MediaItem, MediaType, MediaStatus
 from services.github_service import GitHubService
 from config import telegram_config, app_config
@@ -47,7 +47,7 @@ async def handle_document(message: Message, bot: Bot) -> None:
         media_item = MediaItem(
             telegram_file_id=document.file_id,
             media_type=MediaType.DOCUMENT,
-            filename=document.file_name,
+            filename=document.file_name or f"document_{message.message_id}",
             mime_type=document.mime_type,
             size_bytes=document.file_size,
             caption=message.caption,
@@ -56,7 +56,7 @@ async def handle_document(message: Message, bot: Bot) -> None:
         )
 
         await ask_admin_for_approval(bot, media_item)
-        logger.info(f"✅ Документ добавлен в очередь: {document.file_name}")
+        logger.info(f"✅ Документ добавлен в очередь: {media_item.filename}")
 
     except Exception as e:
         logger.error(f"❌ Ошибка обработки документа: {e}", exc_info=True)
@@ -92,70 +92,89 @@ async def handle_photo(message: Message, bot: Bot) -> None:
 
 
 async def ask_admin_for_approval(bot: Bot, media_item: MediaItem) -> None:
-    """Отправляет админу запрос подтверждения"""
+    """
+    Отправляет админу запрос подтверждения - ЭТАП 1
+    """
+    try:
+        # ✅ Генерируем short_id
+        short_id = str(uuid.uuid4())[:8]
 
-    # ✅ Генерируем short_id и СОХРАНЯЕМ В ПАМЯТИ
-    short_id = str(uuid.uuid4())[:8]
-    pending_callbacks[short_id] = media_item.telegram_file_id
+        # ✅ Создаём объект PendingFile с полной информацией
+        pending_file = PendingFile(
+            file_id=media_item.telegram_file_id,
+            media_type=media_item.media_type.value,
+            original_filename=media_item.filename,
+            mime_type=media_item.mime_type,
+            size_bytes=media_item.size_bytes,
+            caption=media_item.caption,
+            telegram_post_id=media_item.telegram_post_id,
+            waiting_for_name=False,  # Пока не одобрен
+        )
 
-    logger.info(f"💾 Сохранил mapping: {short_id} -> {media_item.telegram_file_id}")
-    logger.info(f"📌 Всё в кэше: {pending_callbacks}")
+        # ✅ Сохраняем в кэш
+        pending_callbacks[short_id] = pending_file
 
-    media_emoji = "📷" if media_item.media_type == MediaType.PHOTO else "📄"
-    size_mb = media_item.size_bytes / 1024 / 1024
+        logger.info(f"💾 Сохранил: {short_id} -> {pending_file.original_filename}")
+        logger.info(f"📌 Cache items: {len(pending_callbacks)}")
 
-    caption = (
-        f"{media_emoji} <b>Новый файл для загрузки</b>\n\n"
-        f"📝 Имя: <code>{media_item.filename}</code>\n"
-        f"📊 Размер: <code>{size_mb:.1f} МБ</code>\n"
-        f"📌 Тип: <code>{media_item.media_type.value}</code>\n"
-    )
+        media_emoji = "📷" if media_item.media_type == MediaType.PHOTO else "📄"
+        size_mb = media_item.size_bytes / 1024 / 1024
 
-    if media_item.caption:
-        caption += f"💬 Описание: <code>{media_item.caption}</code>\n"
+        caption = (
+            f"{media_emoji} <b>Новый файл для загрузки</b>\n\n"
+            f"📝 <b>Имя:</b> <code>{media_item.filename}</code>\n"
+            f"📊 <b>Размер:</b> <code>{size_mb:.1f} МБ</code>\n"
+            f"📌 <b>Тип:</b> <code>{media_item.media_type.value}</code>\n"
+        )
 
-    caption += f"\n❓ Загрузить на сайт?"
+        if media_item.caption:
+            caption += f"💬 <b>Описание:</b> <code>{media_item.caption}</code>\n"
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✅ Загрузить", callback_data=f"approve_{short_id}"
-                ),
-                InlineKeyboardButton(
-                    text="❌ Отклонить", callback_data=f"reject_{short_id}"
-                ),
+        caption += f"\n❓ <b>Загрузить на сайт?</b>"
+
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="✅ Загрузить", callback_data=f"approve_{short_id}"
+                    ),
+                    InlineKeyboardButton(
+                        text="❌ Отклонить", callback_data=f"reject_{short_id}"
+                    ),
+                ]
             ]
-        ]
-    )
+        )
 
-    logger.warning(f"⚠️ ПЕРЕД ОТПРАВКОЙ КНОПОК:")
-    logger.warning(f"⚠️ callback_data должна быть: approve_{short_id}")
-    logger.warning(f"⚠️ Длина callback_data: {len(f'approve_{short_id}')}")
+        logger.warning(f"⚠️ ОТПРАВКА КНОПОК:")
+        logger.warning(f"⚠️ callback_data: approve_{short_id}")
+        logger.warning(f"⚠️ Длина: {len(f'approve_{short_id}')} символов")
 
-    if media_item.media_type == MediaType.PHOTO:
-        try:
-            await bot.send_photo(
-                chat_id=telegram_config.admin_id,
-                photo=media_item.telegram_file_id,
-                caption=caption,
-                parse_mode="HTML",
-                reply_markup=keyboard,
-            )
-            logger.info(f"✅ Запрос подтверждения отправлен (фото)")
-        except Exception as e:
-            logger.error(f"❌ Ошибка отправки фото: {e}")
+        if media_item.media_type == MediaType.PHOTO:
+            try:
+                await bot.send_photo(
+                    chat_id=telegram_config.admin_id,
+                    photo=media_item.telegram_file_id,
+                    caption=caption,
+                    parse_mode="HTML",
+                    reply_markup=keyboard,
+                )
+                logger.info(f"✅ Запрос подтверждения отправлен (фото)")
+            except Exception as e:
+                logger.error(f"❌ Ошибка отправки фото: {e}")
+                await bot.send_message(
+                    chat_id=telegram_config.admin_id,
+                    text=caption,
+                    parse_mode="HTML",
+                    reply_markup=keyboard,
+                )
+        else:
             await bot.send_message(
                 chat_id=telegram_config.admin_id,
                 text=caption,
                 parse_mode="HTML",
                 reply_markup=keyboard,
             )
-    else:
-        await bot.send_message(
-            chat_id=telegram_config.admin_id,
-            text=caption,
-            parse_mode="HTML",
-            reply_markup=keyboard,
-        )
-        logger.info(f"✅ Запрос подтверждения отправлен (документ)")
+            logger.info(f"✅ Запрос подтверждения отправлен (документ)")
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка в ask_admin_for_approval: {e}", exc_info=True)

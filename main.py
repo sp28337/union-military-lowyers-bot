@@ -8,7 +8,12 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from services.github_service import GitHubService
 from config import telegram_config, app_config, github_config
-from handlers import channel_handler, callback_handler, admin_handler
+from handlers import (
+    channel_handler,
+    callback_handler,
+    message_handler,
+    admin_handler,
+)
 
 
 logging.basicConfig(
@@ -39,9 +44,11 @@ async def main():
 
     dispatcher = Dispatcher(storage=MemoryStorage())
 
-    dispatcher.include_router(channel_handler.router)
+    # ВАЖНО: MessageHandler ДОЛЖЕН БЫТЬ ПОСЛЕДНИМ!
     dispatcher.include_router(admin_handler.router)
+    dispatcher.include_router(channel_handler.router)
     dispatcher.include_router(callback_handler.router)
+    dispatcher.include_router(message_handler.router)  # ✅ ПОСЛЕДНИЙ!
 
     try:
         logger.info("🔄 Инициализация GitHub Storage...")

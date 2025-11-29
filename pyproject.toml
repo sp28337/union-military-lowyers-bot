@@ -1,7 +1,7 @@
 [project]
-name = "union-militaty-lawyers-bot"
-version = "0.1.0"
-description = ""
+name = "union-military-lawyers-bot"
+version = "0.2.0"
+description = "Telegram bot for military lawyers union with file management"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -11,3 +11,7 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "pygithub>=2.4.1",
 ]
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
